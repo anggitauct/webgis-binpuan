@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/MarkerCluster.css">
+        <link rel="stylesheet" href="css/MarkerCluster.Default.css">
+        <link rel="stylesheet" href="css/filter.css">
+<link rel="stylesheet" href="css/nouislider.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <link rel="stylesheet" href="css/leaflet-measure.css">
+        <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        </style>
+        <title>Sebaran Kegiatan Direktorat Pembinaan Kemampuan</title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="js/leaflet-measure.js"></script>
+        <script src="js/leaflet.markercluster.js"></script>
+        <script src="js/tailDT.js"></script>
+<script src="js/nouislider.min.js"></script>
+<script src="js/wNumb.js"></script>
+        <script src="data/ProvinsiyangPernahDikunjungi_6.js"></script>
+        <script src="data/DirektoratPembinaanKemampuan_7.js"></script>
+        <script src="data/Overview_8.js"></script>
+        <script>
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        })
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/tomchadwin/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var title = new L.Control({'position':'topleft'});
+        title.onAdd = function (map) {
+            this._div = L.DomUtil.create('div', 'info');
+            this.update();
+            return this._div;
+        };
+        title.update = function () {
+            this._div.innerHTML = '<h2>Sebaran Kegiatan Direktorat Pembinaan Kemampuan</h2>';
+        };
+        title.addTo(map);
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        var measureControl = new L.Control.Measure({
+            position: 'topleft',
+            primaryLengthUnit: 'meters',
+            secondaryLengthUnit: 'kilometers',
+            primaryAreaUnit: 'sqmeters',
+            secondaryAreaUnit: 'hectares'
+        });
+        measureControl.addTo(map);
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].innerHTML = '';
+        document.getElementsByClassName('leaflet-control-measure-toggle')[0].className += ' fas fa-ruler';
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+            if (bounds_group.getLayers().length) {
+                map.fitBounds(bounds_group.getBounds());
+            }
+        }
+        map.createPane('pane_CartoDarkMatter_0');
+        map.getPane('pane_CartoDarkMatter_0').style.zIndex = 400;
+        var layer_CartoDarkMatter_0 = L.tileLayer('https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png', {
+            pane: 'pane_CartoDarkMatter_0',
+            opacity: 1.0,
+            attribution: '<a href="https://cartodb.com/basemaps/">Map tiles by CartoDB, under CC BY 4.0. Data by OpenStreetMap, under ODbL.</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_CartoDarkMatter_0;
+        map.addLayer(layer_CartoDarkMatter_0);
+        map.createPane('pane_CartoPositron_1');
+        map.getPane('pane_CartoPositron_1').style.zIndex = 401;
+        var layer_CartoPositron_1 = L.tileLayer('https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png', {
+            pane: 'pane_CartoPositron_1',
+            opacity: 1.0,
+            attribution: '<a href="https://cartodb.com/basemaps/">Map tiles by CartoDB, under CC BY 4.0. Data by OpenStreetMap, under ODbL.</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_CartoPositron_1;
+        map.addLayer(layer_CartoPositron_1);
+        map.createPane('pane_ESRINationalGeographic_2');
+        map.getPane('pane_ESRINationalGeographic_2').style.zIndex = 402;
+        var layer_ESRINationalGeographic_2 = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}', {
+            pane: 'pane_ESRINationalGeographic_2',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_ESRINationalGeographic_2;
+        map.addLayer(layer_ESRINationalGeographic_2);
+        map.createPane('pane_GoogleSatellite_3');
+        map.getPane('pane_GoogleSatellite_3').style.zIndex = 403;
+        var layer_GoogleSatellite_3 = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+            pane: 'pane_GoogleSatellite_3',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_GoogleSatellite_3;
+        map.addLayer(layer_GoogleSatellite_3);
+        map.createPane('pane_ESRISatellite_4');
+        map.getPane('pane_ESRISatellite_4').style.zIndex = 404;
+        var layer_ESRISatellite_4 = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            pane: 'pane_ESRISatellite_4',
+            opacity: 1.0,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_ESRISatellite_4;
+        map.addLayer(layer_ESRISatellite_4);
+        map.createPane('pane_Labels_5');
+        map.getPane('pane_Labels_5').style.zIndex = 405;
+        var layer_Labels_5 = L.tileLayer('https://mt1.google.com/vt/lyrs=h&x={x}&y={y}&z={z}', {
+            pane: 'pane_Labels_5',
+            opacity: 1.0,
+            attribution: '<a href="https://www.google.at/permissions/geoguidelines/attr-guide.html">Map data ©2015 Google</a>',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 20
+        });
+        layer_Labels_5;
+        map.addLayer(layer_Labels_5);
+        function pop_ProvinsiyangPernahDikunjungi_6(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['GID_0'] !== null ? autolinker.link(String(feature.properties['GID_0']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NAME_0'] !== null ? autolinker.link(String(feature.properties['NAME_0']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['GID_1'] !== null ? autolinker.link(String(feature.properties['GID_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NAME_1'] !== null ? autolinker.link(String(feature.properties['NAME_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['VARNAME_1'] !== null ? autolinker.link(String(feature.properties['VARNAME_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['NL_NAME_1'] !== null ? autolinker.link(String(feature.properties['NL_NAME_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['TYPE_1'] !== null ? autolinker.link(String(feature.properties['TYPE_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['ENGTYPE_1'] !== null ? autolinker.link(String(feature.properties['ENGTYPE_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['CC_1'] !== null ? autolinker.link(String(feature.properties['CC_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['HASC_1'] !== null ? autolinker.link(String(feature.properties['HASC_1']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_ProvinsiyangPernahDikunjungi_6_0() {
+            return {
+                pane: 'pane_ProvinsiyangPernahDikunjungi_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,0,0,0.2)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_ProvinsiyangPernahDikunjungi_6');
+        map.getPane('pane_ProvinsiyangPernahDikunjungi_6').style.zIndex = 406;
+        map.getPane('pane_ProvinsiyangPernahDikunjungi_6').style['mix-blend-mode'] = 'normal';
+        var layer_ProvinsiyangPernahDikunjungi_6 = new L.geoJson(json_ProvinsiyangPernahDikunjungi_6, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_ProvinsiyangPernahDikunjungi_6',
+            layerName: 'layer_ProvinsiyangPernahDikunjungi_6',
+            pane: 'pane_ProvinsiyangPernahDikunjungi_6',
+            onEachFeature: pop_ProvinsiyangPernahDikunjungi_6,
+            style: style_ProvinsiyangPernahDikunjungi_6_0,
+        });
+        bounds_group.addLayer(layer_ProvinsiyangPernahDikunjungi_6);
+        map.addLayer(layer_ProvinsiyangPernahDikunjungi_6);
+        function pop_DirektoratPembinaanKemampuan_7(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['lat'] !== null ? autolinker.link(String(feature.properties['lat']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['lng'] !== null ? autolinker.link(String(feature.properties['lng']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['foto'] !== null ? autolinker.link(String(feature.properties['foto']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Kegiatan'] !== null ? autolinker.link(String(feature.properties['Kegiatan']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Unit'] !== null ? autolinker.link(String(feature.properties['Unit']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Waktu'] !== null ? autolinker.link(String(feature.properties['Waktu']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Tahun'] !== null ? autolinker.link(String(feature.properties['Tahun']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Lokasi'] !== null ? autolinker.link(String(feature.properties['Lokasi']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['Provinsi'] !== null ? autolinker.link(String(feature.properties['Provinsi']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['peserta/pi'] !== null ? autolinker.link(String(feature.properties['peserta/pi']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['jumlah_pes'] !== null ? autolinker.link(String(feature.properties['jumlah_pes']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['ringkasan_'] !== null ? autolinker.link(String(feature.properties['ringkasan_']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['IKAP'] !== null ? autolinker.link(String(feature.properties['IKAP']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['field_15'] !== null ? autolinker.link(String(feature.properties['field_15']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_DirektoratPembinaanKemampuan_7_0() {
+            return {
+                pane: 'pane_DirektoratPembinaanKemampuan_7',
+                radius: 0.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(247,252,245,0.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_DirektoratPembinaanKemampuan_7');
+        map.getPane('pane_DirektoratPembinaanKemampuan_7').style.zIndex = 407;
+        map.getPane('pane_DirektoratPembinaanKemampuan_7').style['mix-blend-mode'] = 'normal';
+        var layer_DirektoratPembinaanKemampuan_7 = new L.geoJson(json_DirektoratPembinaanKemampuan_7, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_DirektoratPembinaanKemampuan_7',
+            layerName: 'layer_DirektoratPembinaanKemampuan_7',
+            pane: 'pane_DirektoratPembinaanKemampuan_7',
+            onEachFeature: pop_DirektoratPembinaanKemampuan_7,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_DirektoratPembinaanKemampuan_7_0(feature));
+            },
+        });
+        var cluster_DirektoratPembinaanKemampuan_7 = new L.MarkerClusterGroup({showCoverageOnHover: false,
+            spiderfyDistanceMultiplier: 2});
+        cluster_DirektoratPembinaanKemampuan_7.addLayer(layer_DirektoratPembinaanKemampuan_7);
+
+        bounds_group.addLayer(layer_DirektoratPembinaanKemampuan_7);
+        cluster_DirektoratPembinaanKemampuan_7.addTo(map);
+        function pop_Overview_8(feature, layer) {
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['foto'] !== null ? autolinker.link(String(feature.properties['foto']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="Kegiatan" colspan="2"><strong>Kegiatan</strong><br />' + (feature.properties['Kegiatan'] !== null ? autolinker.link(String(feature.properties['Kegiatan']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="Unit" colspan="2"><strong>Unit</strong><br />' + (feature.properties['Unit'] !== null ? autolinker.link(String(feature.properties['Unit']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="Waktu" colspan="2"><strong>Waktu</strong><br />' + (feature.properties['Waktu'] !== null ? autolinker.link(String(feature.properties['Waktu']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="Lokasi" colspan="2"><strong>Lokasi</strong><br />' + (feature.properties['Lokasi'] !== null ? autolinker.link(String(feature.properties['Lokasi']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="peserta/pi" colspan="2"><strong>Peserta/Pihak Terlibat</strong><br />' + (feature.properties['peserta/pi'] !== null ? autolinker.link(String(feature.properties['peserta/pi']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="jumlah_pes" colspan="2"><strong>Jumlah Peserta/Responden Valid</strong><br />' + (feature.properties['jumlah_pes'] !== null ? autolinker.link(String(feature.properties['jumlah_pes']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="ringkasan_" colspan="2"><strong>Ringkasan Kegiatan</strong><br />' + (feature.properties['ringkasan_'] !== null ? autolinker.link(String(feature.properties['ringkasan_']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td class="visible-with-data" id="IKAP" colspan="2"><strong>IKAP</strong><br />' + (feature.properties['IKAP'] !== null ? autolinker.link(String(feature.properties['IKAP']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_Overview_8_0(feature) {
+            switch(String(feature.properties['Unit'])) {
+                case 'Pengembangan Sistem Operasi':
+                    return {
+                pane: 'pane_Overview_8',
+                radius: 6.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(31,120,180,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Subdirektorat Pelatihan':
+                    return {
+                pane: 'pane_Overview_8',
+                radius: 6.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(255,127,0,1.0)',
+                interactive: true,
+            }
+                    break;
+                case 'Subdirektorat Penggunaan Kekuatan':
+                    return {
+                pane: 'pane_Overview_8',
+                radius: 6.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(51,160,44,1.0)',
+                interactive: true,
+            }
+                    break;
+            }
+        }
+        map.createPane('pane_Overview_8');
+        map.getPane('pane_Overview_8').style.zIndex = 408;
+        map.getPane('pane_Overview_8').style['mix-blend-mode'] = 'normal';
+        var layer_Overview_8 = new L.geoJson(json_Overview_8, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_Overview_8',
+            layerName: 'layer_Overview_8',
+            pane: 'pane_Overview_8',
+            onEachFeature: pop_Overview_8,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_Overview_8_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_Overview_8);
+        map.addLayer(layer_Overview_8);
+        const url = {"Nominatim OSM": "https://nominatim.openstreetmap.org/search?format=geojson&addressdetails=1&",
+        "France BAN": "https://api-adresse.data.gouv.fr/search/?"}
+        var photonControl = L.control.photon({
+            url: url["Nominatim OSM"],
+            feedbackLabel: '',
+            position: 'topleft',
+            includePosition: true,
+            initial: true,
+            // resultsHandler: myHandler,
+        }).addTo(map);
+        photonControl._container.childNodes[0].style.borderRadius="10px"
+        // Create a variable to store the geoJSON data
+        var x = null;
+        // Create a variable to store the marker
+        var marker = null;
+        // Add an event listener to the Photon control to create a marker from the returned geoJSON data
+        var z = null;
+        photonControl.on('selected', function(e) {
+            console.log(photonControl.search.resultsContainer);
+            if (x != null) {
+                map.removeLayer(obj3.marker);
+                map.removeLayer(x);
+            }
+            obj2.gcd = e.choice;
+            x = L.geoJSON(obj2.gcd).addTo(map);
+            var label = typeof obj2.gcd.properties.label === 'undefined' ? obj2.gcd.properties.display_name : obj2.gcd.properties.label;
+            obj3.marker = L.marker(x.getLayers()[0].getLatLng()).bindPopup(label).addTo(map);
+            map.setView(x.getLayers()[0].getLatLng(), 17);
+            z = typeof e.choice.properties.label === 'undefined'? e.choice.properties.display_name : e.choice.properties.label;
+            console.log(e);
+            e.target.input.value = z;
+        });
+        var search = document.getElementsByClassName("leaflet-photon leaflet-control")[0];
+        search.classList.add("leaflet-control-search")
+        search.style.display = "flex";
+        search.style.backgroundColor="rgba(255,255,255,0.5)" 
+
+        // Create the new button element
+        var button = document.createElement("div");
+        button.id = "gcd-button-control";
+        button.className = "gcd-gl-btn fa fa-search search-button";
+
+        // Insert the button at the beginning of the search control
+        search.insertBefore(button, search.firstChild);
+        last = search.lastChild;
+        last.style.display = "none";
+        button.addEventListener("click", function (e) {
+            if (last.style.display === "none") {
+                last.style.display = "block";
+            } else {
+                last.style.display = "none";
+            }
+        });
+        var overlaysTree = [
+            {label: 'Overview<br /><table><tr><td style="text-align: center;"><img src="legend/Overview_8_PengembanganSistemOperasi0.png" /></td><td>Pengembangan Sistem Operasi</td></tr><tr><td style="text-align: center;"><img src="legend/Overview_8_SubdirektoratPelatihan1.png" /></td><td>Subdirektorat Pelatihan</td></tr><tr><td style="text-align: center;"><img src="legend/Overview_8_SubdirektoratPenggunaanKekuatan2.png" /></td><td>Subdirektorat Penggunaan Kekuatan</td></tr></table>', layer: layer_Overview_8},
+            {label: '<img src="legend/DirektoratPembinaanKemampuan_7.png" /> Direktorat Pembinaan Kemampuan', layer: cluster_DirektoratPembinaanKemampuan_7},
+            {label: '<img src="legend/ProvinsiyangPernahDikunjungi_6.png" /> Provinsi yang Pernah Dikunjungi', layer: layer_ProvinsiyangPernahDikunjungi_6},
+            {label: "Labels", layer: layer_Labels_5},
+            {label: "ESRI Satellite", layer: layer_ESRISatellite_4},
+            {label: "Google Satellite", layer: layer_GoogleSatellite_3},
+            {label: "ESRI National Geographic", layer: layer_ESRINationalGeographic_2},
+            {label: "Carto Positron", layer: layer_CartoPositron_1},
+            {label: "Carto Dark Matter", layer: layer_CartoDarkMatter_0},]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        var mapDiv = document.getElementById('map');
+        var row = document.createElement('div');
+        row.className="row";
+        row.id="all";
+        row.style.height = "100%";
+        var col1 = document.createElement('div');
+        col1.className="col9";
+        col1.id = "mapWindow";
+        col1.style.height = "99%";
+        col1.style.width = "80%";
+        col1.style.display = "inline-block";
+        var col2 = document.createElement('div');
+        col2.className="col3";
+        col2.id = "menu";
+        col2.style.display = "inline-block";
+        mapDiv.parentNode.insertBefore(row, mapDiv);
+        document.getElementById("all").appendChild(col1);
+        document.getElementById("all").appendChild(col2);
+        col1.appendChild(mapDiv)
+        var Filters = {"Tahun": "int","Provinsi": "str","Unit": "str"};
+        function filterFunc() {
+          map.eachLayer(function(lyr){
+          if ("options" in lyr && "dataVar" in lyr["options"]){
+            features = this[lyr["options"]["dataVar"]].features.slice(0);
+            try{
+              for (key in Filters){
+                keyS = key.replace(/[^a-zA-Z0-9_]/g, "")
+                if (Filters[key] == "str" || Filters[key] == "bool"){
+                  var selection = [];
+                  var options = document.getElementById("sel_" + keyS).options
+                  for (var i=0; i < options.length; i++) {
+                    if (options[i].selected) selection.push(options[i].value);
+                  }
+                    try{
+                      if (key in features[0].properties){
+                        for (i = features.length - 1;
+                          i >= 0; --i){
+                          if (selection.indexOf(
+                          features[i].properties[key])<0
+                          && selection.length>0) {
+                          features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                  }
+                }
+                if (Filters[key] == "int"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (parseInt(features[i].properties[key])
+                          < sliderVals[0]
+                          || parseInt(features[i].properties[key])
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "real"){
+                  sliderVals =  document.getElementById(
+                    "div_" + keyS).noUiSlider.get();
+                  try{
+                    if (key in features[0].properties){
+                    for (i = features.length - 1; i >= 0; --i){
+                      if (features[i].properties[key]
+                          < sliderVals[0]
+                          || features[i].properties[key]
+                          > sliderVals[1]){
+                            features.splice(i,1);
+                          }
+                        }
+                      }
+                    } catch(err){
+                    }
+                  }
+                if (Filters[key] == "date"
+                  || Filters[key] == "datetime"
+                  || Filters[key] == "time"){
+                  try{
+                    if (key in features[0].properties){
+                      HTMLkey = key.replace(/[&\/\\#,+()$~%.'":*?<>{} ]/g, '');
+                      startdate = document.getElementById("dat_" +
+                        HTMLkey + "_date1").value.replace(" ", "T");
+                      enddate = document.getElementById("dat_" +
+                        HTMLkey + "_date2").value.replace(" ", "T");
+                      for (i = features.length - 1; i >= 0; --i){
+                        if (features[i].properties[key] < startdate
+                          || features[i].properties[key] > enddate){
+                          features.splice(i,1);
+                        }
+                      }
+                    }
+                  } catch(err){
+                  }
+                }
+              }
+            } catch(err){
+            }
+          this[lyr["options"]["layerName"]].clearLayers();
+          this[lyr["options"]["layerName"]].addData(features);
+          }
+          })
+        }
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Tahun = document.createElement("div");
+            div_Tahun.id = "div_Tahun";
+            div_Tahun.className = "slider";
+            document.getElementById("menu").appendChild(div_Tahun);
+            var lab_Tahun = document.createElement('div');
+            lab_Tahun.innerHTML  = 'Tahun: <span id="val_Tahun"></span>';
+            lab_Tahun.className = 'filterlabel';
+            document.getElementById("menu").appendChild(lab_Tahun);
+            var reset_Tahun = document.createElement('div');
+            reset_Tahun.innerHTML = 'clear filter';
+            reset_Tahun.className = 'filterlabel';
+            lab_Tahun.className = 'filterlabel';
+            reset_Tahun.onclick = function() {
+                sel_Tahun.noUiSlider.reset();
+            };
+            document.getElementById("menu").appendChild(reset_Tahun);
+            var sel_Tahun = document.getElementById('div_Tahun');
+            noUiSlider.create(sel_Tahun, {
+                connect: true,
+                start: [2024, 2025],
+                step: 1,
+                format: wNumb({
+                    decimals: 0,
+                    }),
+                range: {
+                min: 2024,
+                max: 2025
+                }
+            });
+            sel_Tahun.noUiSlider.on('update', function (values) {
+            filterVals =[];
+            for (value in values){
+            filterVals.push(parseInt(value))
+            }
+            val_Tahun = document.getElementById('val_Tahun');
+            val_Tahun.innerHTML = values.join(' - ');
+                filterFunc()
+            });
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Provinsi = document.createElement('div');
+            div_Provinsi.id = "div_Provinsi";
+            div_Provinsi.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Provinsi);
+            sel_Provinsi = document.createElement('select');
+            sel_Provinsi.multiple = true;
+            sel_Provinsi.size = 10;
+            sel_Provinsi.id = "sel_Provinsi";
+            var Provinsi_options_str = "<option value='' unselected></option>";
+            sel_Provinsi.onchange = function(){filterFunc()};
+            Provinsi_options_str  += '<option value="Aceh">Aceh</option>';
+            Provinsi_options_str  += '<option value="Bali">Bali</option>';
+            Provinsi_options_str  += '<option value="Banten">Banten</option>';
+            Provinsi_options_str  += '<option value="DI Yogyakarta">DI Yogyakarta</option>';
+            Provinsi_options_str  += '<option value="DKI Jakarta">DKI Jakarta</option>';
+            Provinsi_options_str  += '<option value="Jawa Barat">Jawa Barat</option>';
+            Provinsi_options_str  += '<option value="Jawa Tengah">Jawa Tengah</option>';
+            Provinsi_options_str  += '<option value="Jawa Timur">Jawa Timur</option>';
+            Provinsi_options_str  += '<option value="Kalimantan Selatan">Kalimantan Selatan</option>';
+            Provinsi_options_str  += '<option value="Kalimantan Timur">Kalimantan Timur</option>';
+            Provinsi_options_str  += '<option value="Kepulauan Bangka Belitung">Kepulauan Bangka Belitung</option>';
+            Provinsi_options_str  += '<option value="Kepulauan Riau">Kepulauan Riau</option>';
+            Provinsi_options_str  += '<option value="Lampung">Lampung</option>';
+            Provinsi_options_str  += '<option value="Nusa Tenggara Barat">Nusa Tenggara Barat</option>';
+            Provinsi_options_str  += '<option value="Riau">Riau</option>';
+            sel_Provinsi.innerHTML = Provinsi_options_str;
+            div_Provinsi.appendChild(sel_Provinsi);
+            var lab_Provinsi = document.createElement('div');
+            lab_Provinsi.innerHTML = 'Provinsi';
+            lab_Provinsi.className = 'filterlabel';
+            div_Provinsi.appendChild(lab_Provinsi);
+            var reset_Provinsi = document.createElement('div');
+            reset_Provinsi.innerHTML = 'clear filter';
+            reset_Provinsi.className = 'filterlabel';
+            reset_Provinsi.onclick = function() {
+                var options = document.getElementById("sel_Provinsi").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Provinsi.appendChild(reset_Provinsi);
+            document.getElementById("menu").appendChild(
+                document.createElement("div"));
+            var div_Unit = document.createElement('div');
+            div_Unit.id = "div_Unit";
+            div_Unit.className= "filterselect";
+            document.getElementById("menu").appendChild(div_Unit);
+            sel_Unit = document.createElement('select');
+            sel_Unit.multiple = true;
+            sel_Unit.size = 3;
+            sel_Unit.id = "sel_Unit";
+            var Unit_options_str = "<option value='' unselected></option>";
+            sel_Unit.onchange = function(){filterFunc()};
+            Unit_options_str  += '<option value="Pengembangan Sistem Operasi">Pengembangan Sistem Operasi</option>';
+            Unit_options_str  += '<option value="Subdirektorat Pelatihan">Subdirektorat Pelatihan</option>';
+            Unit_options_str  += '<option value="Subdirektorat Penggunaan Kekuatan">Subdirektorat Penggunaan Kekuatan</option>';
+            sel_Unit.innerHTML = Unit_options_str;
+            div_Unit.appendChild(sel_Unit);
+            var lab_Unit = document.createElement('div');
+            lab_Unit.innerHTML = 'Unit';
+            lab_Unit.className = 'filterlabel';
+            div_Unit.appendChild(lab_Unit);
+            var reset_Unit = document.createElement('div');
+            reset_Unit.innerHTML = 'clear filter';
+            reset_Unit.className = 'filterlabel';
+            reset_Unit.onclick = function() {
+                var options = document.getElementById("sel_Unit").options;
+                for (var i=0; i < options.length; i++) {
+                    options[i].selected = false;
+                }
+                filterFunc();
+            };
+            div_Unit.appendChild(reset_Unit);
+        </script>        
+    </body>
+</html>
